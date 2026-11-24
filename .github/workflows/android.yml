@@ -1,6 +1,11 @@
 name: Android APK
 on:
   workflow_dispatch:
+    inputs:
+      publish_release:
+        description: Publish the verified signed APK as a GitHub Release
+        type: boolean
+        default: true
   push:
     branches: [android]
     paths:
@@ -11,7 +16,7 @@ on:
       - '*.config.ts'
       - '.github/workflows/android.yml'
 permissions:
-  contents: read
+  contents: write
 concurrency:
   group: android-${{ github.ref }}
   cancel-in-progress: true
@@ -80,6 +85,9 @@ jobs:
           name: OpenSkyLight-Android-instrumentation
           path: android/app/build/outputs/androidTest-results/
           if-no-files-found: ignore
+      - name: Require persistent signing for published releases
+        if: github.event_name == 'workflow_dispatch' && inputs.publish_release
+        run: test "$HAS_KEYSTORE" = 'true'
       - name: Restore persistent signing key
         if: env.HAS_KEYSTORE == 'true'
         env:
@@ -99,15 +107,36 @@ jobs:
         run: |
           ./gradlew assembleRelease --no-daemon --max-workers=2
           signer="$(find "$ANDROID_HOME/build-tools" -name apksigner | sort -V | tail -1)"
-          cert="$("$signer" verify --print-certs app/build/outputs/apk/release/app-release.apk | sed -n 's/^Signer #1 certificate SHA-256 digest: //p')"
-          test -n "$OSL_CERT_SHA256"
-          test "${cert,,}" = "${OSL_CERT_SHA256,,}"
+          "$signer" verify --print-certs app/build/outputs/apk/release/app-release.apk > app/build/outputs/apk/release/signing-certificate.txt
+          cert="$(sed -n -E 's/^(Signer #1|V2 Signer): certificate SHA-256 digest: //p' app/build/outputs/apk/release/signing-certificate.txt | head -1)"
+          expected="$(printf '%s' "$OSL_CERT_SHA256" | tr -d ':[:space:]' | tr '[:upper:]' '[:lower:]')"
+          test -n "$cert"
+          test -n "$expected"
+          test "${cert,,}" = "$expected"
       - uses: actions/upload-artifact@v6
         if: env.HAS_KEYSTORE == 'true'
         with:
           name: OpenSkyLight-Android-signed
           path: android/app/build/outputs/apk/release/app-release.apk
           if-no-files-found: error
+      - name: Publish signed Android release
+        if: github.event_name == 'workflow_dispatch' && inputs.publish_release && env.HAS_KEYSTORE == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version="$(node -p "require('./package.json').version")"
+          tag="android-v$version-build-$OSL_VERSION_CODE"
+          mkdir -p release-assets
+          cp android/app/build/outputs/apk/release/app-release.apk "release-assets/OpenSkyLight-$version-$OSL_VERSION_CODE.apk"
+          cp android/app/build/outputs/apk/release/signing-certificate.txt release-assets/
+          (cd release-assets && sha256sum ./*.apk > SHA256SUMS)
+          cat > "$RUNNER_TEMP/android-release-notes.txt" <<'NOTES'
+          Signed Android release for home installation, using the permanent repository signing key.
+          Requires Android 9 or later. Register the certificate SHA-1 in signing-certificate.txt with the Android OAuth client for com.jn90z.openskylight.
+          Updates require the same signing key. Existing debug installs use a different key and require preserving local data before replacement.
+          Automated checks include shared tests and Android 9 integration tests. Physical tablet performance and live Google account authorization require device verification.
+          NOTES
+          gh release create "$tag" release-assets/* --target "$GITHUB_SHA" --title "OpenSkyLight Android $version (build $OSL_VERSION_CODE)" --notes-file "$RUNNER_TEMP/android-release-notes.txt" --latest=false
       - name: Remove temporary signing material
         if: always()
         run: rm -f "$RUNNER_TEMP/openskylight-release.jks"
