@@ -1,15 +1,31 @@
-import { readFileSync, writeFileSync, renameSync, mkdirSync } from 'node:fs'
+import { cpSync, mkdirSync, renameSync } from 'node:fs'
 import { spawnSync } from 'node:child_process'
-const root = JSON.parse(readFileSync('package.json','utf8'))
-const desktopOnly = new Set(['@googleapis/calendar','better-sqlite3','drizzle-orm','electron-updater','ffmpeg-static','google-auth-library','ws','electron','electron-builder','electron-vite','playwright-core','@types/better-sqlite3','@types/ws'])
-const dependencies = Object.fromEntries(Object.entries({...root.dependencies,...root.devDependencies}).filter(([name])=>!desktopOnly.has(name)))
-Object.assign(dependencies, {'@capacitor/core':'7.4.3','@capacitor/cli':'7.4.3','@capacitor/android':'7.4.3'})
-mkdirSync('.android-build',{recursive:true})
-writeFileSync('.android-build/package.original.json',JSON.stringify(root,null,2))
-writeFileSync('package.json',JSON.stringify({name:'openskylight-android',version:root.version,private:true,dependencies},null,2))
-function run(command,args){const r=spawnSync(command,args,{stdio:'inherit',shell:process.platform==='win32'});if(r.status!==0)throw new Error(command+' failed: '+r.status)}
-run('npm',['install','--ignore-scripts','--no-audit','--no-fund'])
-run('npx',['vite','build','--config','android.vite.config.ts'])
-renameSync('out/android/android.html','out/android/index.html')
-run('npx',['cap','add','android'])
-run('npx',['cap','sync','android'])
+import { build } from 'esbuild'
+
+function run(command, args) {
+  const result = spawnSync(command, args, { stdio: 'inherit', shell: process.platform === 'win32' })
+  if (result.status !== 0) throw result.error ?? new Error(`${command} failed (${result.status})`)
+}
+
+run('npx', ['--no-install', 'vite', 'build', '--config', 'android.vite.config.ts'])
+renameSync('out/android/android.html', 'out/android/index.html')
+run('npx', ['--no-install', 'vite', 'build', '--config', 'companion.vite.config.ts'])
+run('npx', ['--no-install', 'cap', 'sync', 'android'])
+cpSync('out/companion', 'out/companion-package/companion', { recursive: true })
+mkdirSync('android/app/build/generated/oslAssets', { recursive: true })
+await build({
+  entryPoints: ['src/android/backend.ts'],
+  outfile: 'android/app/build/generated/oslAssets/backend.js',
+  bundle: true,
+  format: 'iife',
+  platform: 'neutral',
+  mainFields: ['browser', 'module', 'main'],
+  target: 'es2022',
+  minify: true,
+  alias: {
+    '@shared': './src/shared',
+    'better-sqlite3': './src/android/sqlite.ts',
+    'node:crypto': './src/android/crypto.ts',
+    '@googleapis/calendar': './src/android/google-calendar.ts'
+  }
+})

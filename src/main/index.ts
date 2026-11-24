@@ -1,4 +1,5 @@
 import { app, BrowserWindow } from 'electron'
+import { secretsStoredAsPlainText } from './secretStorage'
 import { join } from 'path'
 import { DateTime } from 'luxon'
 import { openDatabase } from './db/client'
@@ -84,7 +85,7 @@ if (!gotLock) {
     const companion = createCompanionServer({
       settings,
       tokens: createCompanionTokens(settings),
-      dispatch: (channel, payload) => dispatch(services, channelTable, channel, payload, { gate: 'none' }),
+      dispatch: (channel, payload) => dispatch(services, channelTable, channel, payload, { gate: 'none', broadcast }),
       version: app.getVersion(),
       staticRoot: join(__dirname, '../companion')
     })
@@ -112,7 +113,7 @@ if (!gotLock) {
       birdnet: createBirdNetService(),
       companion
     }
-    channelTable = buildChannelTable(services)
+    channelTable = buildChannelTable(services, { version: app.getVersion(), name: process.platform, plaintextSecrets: secretsStoredAsPlainText })
     registerIpcHandlers(services, channelTable)
     createMainWindow()
     syncManager.start()

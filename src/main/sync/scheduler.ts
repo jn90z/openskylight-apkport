@@ -18,7 +18,7 @@ export interface SyncStatus {
 
 export function createSyncManager(deps: {
   db: AppDb
-  auth: GoogleAuth
+  auth: Pick<GoogleAuth, 'markAuthError'>
   google: GoogleSync
   outbox: OutboxWorker
   ics: IcsSync

@@ -28,7 +28,7 @@ export function httpStatus(err: unknown): number | null {
   return null
 }
 
-export function createGoogleSync(deps: { db: AppDb; auth: GoogleAuth; deviceTz: () => string }) {
+export function createGoogleSync(deps: { db: AppDb; auth: Pick<GoogleAuth, 'getAuthedClient'>; deviceTz: () => string }) {
   const { db, auth } = deps
 
   function api(accountId: string): calendar_v3.Calendar {

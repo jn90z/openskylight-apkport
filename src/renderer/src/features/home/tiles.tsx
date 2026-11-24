@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { DateTime } from 'luxon'
 import { useQuery } from '@tanstack/react-query'
-import mpegts from 'mpegts.js'
 import type { HomeTile } from '@shared/types'
 import { presetById } from '@shared/rss'
 import { agendaRange, dayRange, eachDay } from '@shared/dates'
@@ -514,14 +513,22 @@ export function CameraTile({ tile }: TileProps) {
   const [status, setStatus] = useState<'connecting' | 'live' | 'error'>('connecting')
   const [retryKey, setRetryKey] = useState(0)
 
+  const [visible, setVisible] = useState(!document.hidden)
+  const positionCamera = window.osl.androidCameraPosition
+  useEffect(() => {
+    if (!positionCamera) return
+    const update = (): void => setVisible(!document.hidden)
+    document.addEventListener('visibilitychange', update)
+    return () => document.removeEventListener('visibilitychange', update)
+  }, [positionCamera])
+
   useEffect(() => {
     const video = videoRef.current
-    if (!cameraId || !cameraFound || !video || covered) return
-    if (!mpegts.isSupported()) {
-      setStatus('error')
-      return
+    if (!cameraId || !cameraFound || !video || covered || !visible) return
+    if (positionCamera) {
+      return connectAndroidCamera(cameraId, video, positionCamera, setStatus, () => setRetryKey((key) => key + 1))
     }
-    let player: mpegts.Player | null = null
+    let player: ReturnType<typeof import('mpegts.js').default.createPlayer> | null = null
     let stopped = false
     let sessionId: string | null = null
     let wentLive = false
@@ -547,24 +554,28 @@ export function CameraTile({ tile }: TileProps) {
     }
     video.addEventListener('playing', goLive)
 
-    ipcInvoke('camera:start', { cameraId })
-      .then((res) => {
-        if (stopped) {
-          void ipcInvoke('camera:stop', { sessionId: res.sessionId })
-          return
-        }
-        sessionId = res.sessionId
-        player = mpegts.createPlayer(
-          { type: 'mpegts', isLive: true, url: res.wsUrl },
-          { enableStashBuffer: false, liveBufferLatencyChasing: true, autoCleanupSourceBuffer: true }
-        )
-        player.attachMediaElement(video)
-        player.on(mpegts.Events.ERROR, fail)
-        player.on(mpegts.Events.MEDIA_INFO, goLive)
-        player.load()
-        void player.play()?.catch(() => undefined)
-      })
-      .catch(fail)
+    void import('mpegts.js').then(async ({ default: mpegts }) => {
+      if (stopped) return
+      if (!mpegts.isSupported()) {
+        fail()
+        return
+      }
+      const res = await ipcInvoke('camera:start', { cameraId })
+      if (stopped) {
+        void ipcInvoke('camera:stop', { sessionId: res.sessionId })
+        return
+      }
+      sessionId = res.sessionId
+      player = mpegts.createPlayer(
+        { type: 'mpegts', isLive: true, url: res.wsUrl },
+        { enableStashBuffer: false, liveBufferLatencyChasing: true, autoCleanupSourceBuffer: true }
+      )
+      player.attachMediaElement(video)
+      player.on(mpegts.Events.ERROR, fail)
+      player.on(mpegts.Events.MEDIA_INFO, goLive)
+      player.load()
+      void player.play()?.catch(() => undefined)
+    }).catch(fail)
 
     return () => {
       stopped = true
@@ -578,7 +589,7 @@ export function CameraTile({ tile }: TileProps) {
       }
       if (sessionId) void ipcInvoke('camera:stop', { sessionId })
     }
-  }, [cameraId, cameraFound, covered, retryKey])
+  }, [cameraId, cameraFound, covered, positionCamera, retryKey, visible])
 
   if (!cameraId || camerasLoading) return <Placeholder>Connecting…</Placeholder>
   if (!camera) return <Placeholder>Camera not found — re-add this tile</Placeholder>
@@ -598,6 +609,87 @@ export function CameraTile({ tile }: TileProps) {
       )}
     </div>
   )
+}
+
+function connectAndroidCamera(
+  cameraId: string,
+  element: HTMLVideoElement,
+  position: NonNullable<Window['osl']['androidCameraPosition']>,
+  setStatus: (status: 'connecting' | 'live' | 'error') => void,
+  retry: () => void
+): () => void {
+  let sessionId: string | undefined
+  let disposed = false
+  let retryTimer: number | undefined
+  let frame = 0
+  let inView = true
+  let live = false
+  let earlyState: { sessionId: string; state: string } | undefined
+  setStatus('connecting')
+
+  const fail = (): void => {
+    if (disposed || retryTimer !== undefined) return
+    live = false
+    setStatus('error')
+    if (sessionId) void ipcInvoke('camera:stop', { sessionId }).catch(() => undefined)
+    retryTimer = window.setTimeout(retry, CAMERA_RETRY_MS)
+  }
+  const watchdog = window.setTimeout(fail, 15_000)
+  const update = (): void => {
+    if (frame) return
+    frame = window.requestAnimationFrame(() => {
+      frame = 0
+      if (!sessionId || disposed) return
+      const rect = element.getBoundingClientRect()
+      void position({
+        sessionId, left: rect.left, top: rect.top + 28, width: rect.width,
+        height: Math.max(0, rect.height - 28), visible: live && inView && !document.hidden
+      }).catch(fail)
+    })
+  }
+  const applyState = ({ sessionId: id, state }: { sessionId: string; state: string }): void => {
+    if (!sessionId) { earlyState = { sessionId: id, state }; return }
+    if (sessionId !== id || disposed) return
+    if (state === 'live') {
+      live = true
+      setStatus('live')
+      window.clearTimeout(watchdog)
+      update()
+    } else {
+      fail()
+    }
+  }
+  const unlisten = window.osl.on('push:cameraState', (data) => applyState(data as { sessionId: string; state: string }))
+  const observer = new ResizeObserver(update)
+  observer.observe(element)
+  const intersection = new IntersectionObserver(([entry]) => {
+    inView = entry.isIntersecting
+    update()
+  })
+  intersection.observe(element)
+  window.addEventListener('scroll', update, true)
+  window.addEventListener('resize', update)
+  void ipcInvoke('camera:start', { cameraId }).then((session) => {
+    sessionId = session.sessionId
+    if (disposed || retryTimer !== undefined) {
+      void ipcInvoke('camera:stop', { sessionId }).catch(() => undefined)
+      return
+    }
+    if (earlyState) applyState(earlyState)
+  }).catch(fail)
+
+  return () => {
+    disposed = true
+    unlisten()
+    observer.disconnect()
+    intersection.disconnect()
+    window.removeEventListener('scroll', update, true)
+    window.removeEventListener('resize', update)
+    window.cancelAnimationFrame(frame)
+    window.clearTimeout(watchdog)
+    if (retryTimer !== undefined) window.clearTimeout(retryTimer)
+    if (sessionId) void ipcInvoke('camera:stop', { sessionId }).catch(() => undefined)
+  }
 }
 
 export function PhotoTile({ tile }: TileProps) {

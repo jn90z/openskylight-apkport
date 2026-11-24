@@ -1,34 +1,49 @@
-/**
- * Android compatibility adapter for the existing OpenSkyLight IPC contract.
- *
- * This adapter intentionally fails closed. Returning fabricated success or
- * empty datasets would make calendar changes appear to persist when they do not.
- * Native handlers must implement the actual channels before an APK is usable.
- */
-const allowedPrefixes = [
-  'app:', 'settings:', 'people:', 'calendars:', 'events:', 'google:',
-  'ics:', 'sync:', 'weather:', 'auth:', 'chores:', 'stars:', 'rewards:',
-  'lists:', 'listItems:', 'meals:', 'screensaver:', 'kiosk:', 'rss:',
-  'camera:', 'companion:', 'birdnet:'
-]
+import { registerPlugin, type PluginListenerHandle } from '@capacitor/core'
+
+interface NativeBridge {
+  invoke(options: { channel: string; payload: unknown }): Promise<unknown>
+  ready(): Promise<void>
+  addListener(event: string, handler: (data: unknown) => void): Promise<PluginListenerHandle>
+  cameraPosition(options: {
+    sessionId: string; left: number; top: number; width: number; height: number; visible: boolean
+  }): Promise<void>
+}
+
+const native = registerPlugin<NativeBridge>('OpenSkyLight')
 
 export function installAndroidBridge(): void {
-  if (typeof window === 'undefined' || window.osl) return
+  if (window.osl) return
+  let readyScheduled = false
   window.osl = {
-    async invoke(channel: string, _payload: unknown): Promise<unknown> {
-      if (!allowedPrefixes.some((prefix) => channel.startsWith(prefix))) {
-        return { ok: false, error: { code: 'CHANNEL_BLOCKED', message: 'Blocked channel: ' + channel } }
-      }
-      return {
-        ok: false,
-        error: {
-          code: 'ANDROID_NOT_IMPLEMENTED',
-          message: 'OpenSkyLight Android backend is not implemented for ' + channel
+    async invoke(channel, payload) {
+      try {
+        const result = await native.invoke({ channel, payload })
+        if (channel === 'birdnet:getDetections') {
+          const response = result as { ok: boolean; data?: { detections: { image: string }[] } }
+          for (const bird of response.data?.detections ?? []) {
+            if (bird.image.startsWith('osl-bird://image?')) bird.image = bird.image.replace('osl-bird://image?', '/_osl/bird-image?')
+          }
         }
+        return result
+      } catch {
+        return { ok: false, error: { code: 'BRIDGE_ERROR', message: 'Could not contact the Android backend' } }
       }
     },
-    on(_channel: string, _callback: (data: unknown) => void): () => void {
-      return () => {}
-    }
+    on(channel, callback) {
+      let disposed = false
+      const listener = native.addListener(channel, (data) => {
+        if (!disposed) callback(data)
+      })
+      if (!readyScheduled) {
+        readyScheduled = true
+        // Subscribe before asking the backend to publish its current kiosk state.
+        window.setTimeout(() => { void native.ready().catch(() => undefined) }, 0)
+      }
+      return () => {
+        disposed = true
+        void listener.then((subscription) => subscription.remove()).catch(() => undefined)
+      }
+    },
+    androidCameraPosition: (options) => native.cameraPosition(options)
   }
 }

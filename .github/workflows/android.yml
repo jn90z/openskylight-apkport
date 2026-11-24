@@ -1,13 +1,14 @@
-name: Android prototype APK
+name: Android APK
 on:
   workflow_dispatch:
   push:
     branches: [android]
     paths:
       - 'src/**'
+      - 'android/**'
       - 'scripts/android-prepare.mjs'
-      - 'android.vite.config.ts'
-      - 'capacitor.config.ts'
+      - 'package*.json'
+      - '*.config.ts'
       - '.github/workflows/android.yml'
 permissions:
   contents: read
@@ -16,33 +17,89 @@ concurrency:
   cancel-in-progress: true
 jobs:
   apk:
+    if: github.ref == 'refs/heads/android'
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 35
+    env:
+      OSL_VERSION_CODE: ${{ github.run_number }}
+      HAS_KEYSTORE: ${{ secrets.OSL_KEYSTORE_BASE64 != '' }}
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-node@v5
         with:
           node-version: '22'
+          cache: npm
       - uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '21'
       - uses: gradle/actions/setup-gradle@v6
-      - name: Show tool versions and runner SDK
+      - name: Install locked build dependencies
+        run: npm ci --ignore-scripts
+      - name: Check TypeScript and shared behavior
         run: |
-          java -version
-          node --version
-          npm --version
-          echo "ANDROID_HOME=$ANDROID_HOME"
-          echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT"
-          ls "$ANDROID_HOME/platforms"
-          ls "$ANDROID_HOME/build-tools"
+          npm run typecheck
+          npm rebuild better-sqlite3
+          npx --no-install vitest run
       - run: node scripts/android-prepare.mjs
-      - name: Build debug APK
+      - name: Build and unit test debug APK
         working-directory: android
         run: ./gradlew testDebugUnitTest assembleDebug --stacktrace --no-daemon --max-workers=2
       - uses: actions/upload-artifact@v6
         with:
-          name: OpenSkyLight-Android-PROTOTYPE
+          name: OpenSkyLight-Android-debug
           path: android/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
+      - name: Enable KVM for Android instrumentation
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Test WebView and native backend on Android 9
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 28
+          arch: x86_64
+          target: google_apis
+          ram-size: 2048M
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim
+          disable-animations: true
+          script: cd android && ./gradlew connectedDebugAndroidTest --no-daemon --max-workers=2
+      - name: Upload instrumentation results
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: OpenSkyLight-Android-instrumentation
+          path: android/app/build/outputs/androidTest-results/
+          if-no-files-found: ignore
+      - name: Restore persistent signing key
+        if: env.HAS_KEYSTORE == 'true'
+        env:
+          OSL_KEYSTORE_BASE64: ${{ secrets.OSL_KEYSTORE_BASE64 }}
+        run: |
+          umask 077
+          printf '%s' "$OSL_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/openskylight-release.jks"
+      - name: Build and verify signed release APK
+        if: env.HAS_KEYSTORE == 'true'
+        working-directory: android
+        env:
+          OSL_KEYSTORE_PATH: ${{ runner.temp }}/openskylight-release.jks
+          OSL_KEYSTORE_PASSWORD: ${{ secrets.OSL_KEYSTORE_PASSWORD }}
+          OSL_KEY_ALIAS: ${{ secrets.OSL_KEY_ALIAS }}
+          OSL_KEY_PASSWORD: ${{ secrets.OSL_KEY_PASSWORD }}
+          OSL_CERT_SHA256: ${{ vars.OSL_CERT_SHA256 }}
+        run: |
+          ./gradlew assembleRelease --no-daemon --max-workers=2
+          signer="$(find "$ANDROID_HOME/build-tools" -name apksigner | sort -V | tail -1)"
+          cert="$("$signer" verify --print-certs app/build/outputs/apk/release/app-release.apk | sed -n 's/^Signer #1 certificate SHA-256 digest: //p')"
+          test -n "$OSL_CERT_SHA256"
+          test "${cert,,}" = "${OSL_CERT_SHA256,,}"
+      - uses: actions/upload-artifact@v6
+        if: env.HAS_KEYSTORE == 'true'
+        with:
+          name: OpenSkyLight-Android-signed
+          path: android/app/build/outputs/apk/release/app-release.apk
+          if-no-files-found: error
+      - name: Remove temporary signing material
+        if: always()
+        run: rm -f "$RUNNER_TEMP/openskylight-release.jks"

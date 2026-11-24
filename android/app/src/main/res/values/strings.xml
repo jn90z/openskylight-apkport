@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">OpenSkyLight</string>
+    <string name="title_activity_main">OpenSkyLight</string>
+    <string name="package_name">com.jn90z.openskylight</string>
+    <string name="custom_url_scheme">com.jn90z.openskylight</string>
+</resources>

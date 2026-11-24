@@ -27,7 +27,7 @@ export function createCompanionTokens(settings: Pick<SettingsService, 'getRaw' |
 
   /** Mint a new token; returns the plaintext exactly once. Older pairings stay valid. */
   function issue(): string {
-    const token = randomBytes(32).toString('base64url')
+    const token = randomBytes(32).toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
     const hashes = [...readHashes(), hashOf(token)].slice(-MAX_TOKENS)
     settings.setRaw(STORE_KEY, JSON.stringify(hashes))
     return token
