@@ -156,6 +156,11 @@ internal class NativeGoogle(private val context: Context, private val backend: B
         return when (code) {
             10 -> "Google rejected this Android OAuth configuration. Register ${context.packageName} " +
                 "with this APK’s signing SHA-1${signingFingerprint()}."
+            // Play services reports UNREGISTERED_ON_API_CONSOLE as INTERNAL_ERROR
+            // on some Samsung versions. Include the installed certificate so the
+            // parent can check the actual APK registration.
+            8 -> "Google could not authorize this APK (status 8). Check that the Android OAuth client " +
+                "registers ${context.packageName} with this APK’s signing SHA-1${signingFingerprint()}."
             7 -> "Could not reach Google. Check the tablet's internet connection."
             else -> "Google could not authorize Calendar${code?.let { " ($it)" }.orEmpty()}. Reconnect the account."
         }
