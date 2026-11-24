@@ -1,10 +1,23 @@
-# OpenSkyLight
+# OpenSkyLight for Android
 
-An open-source, fully standalone family calendar display — a [Skylight Calendar](https://myskylight.com) alternative with no subscription, no cloud account, and no Home Assistant. One Electron app owns the whole touchscreen: calendar, family member color coding, Google sync, weather, chores, rewards, lists, meals, news, live cameras, and a photo screensaver.
+An open-source family calendar and touchscreen dashboard, ported from the original [OpenSkyLight desktop project](https://github.com/jn90z/openskylight-apkport/tree/main). No subscription or mandatory OpenSkyLight cloud account.
 
-The Android branch has separate [APK installation and verification instructions](docs/ANDROID_PORT.md).
+This branch brings the shared React interface to Android tablets using Capacitor and native Android services rather than Electron. Designed with the Samsung Galaxy Tab A (SM-T510, 2 GB RAM) in mind.
 
-## What it looks like
+[Download releases](https://github.com/jn90z/openskylight-apkport/releases) · [Android builds](https://github.com/jn90z/openskylight-apkport/actions/workflows/android.yml) · [Setup guide](docs/ANDROID_PORT.md) · [Verification status](docs/ANDROID_STATUS.md)
+
+## Requirements
+
+- Android 9 (API 28) or newer.
+- Updated Android System WebView and Chrome.
+- Google Play services for Google Calendar authorization.
+- Wi-Fi for synchronization, weather and optional phone companion access.
+
+## Features
+
+The port includes the shared family dashboard, day/week/month/agenda calendar views, local events and recurrence, family profiles, Google Calendar integration, ICS subscriptions, chores and rewards, grocery and custom lists, meal planning, weather, photo screensaver, PIN-protected settings, kiosk controls and the LAN phone companion. Camera and BirdNET integrations are also included. See the [verification matrix](docs/ANDROID_STATUS.md) for platform-specific limitations and outstanding physical-device tests.
+
+## Interface previews (upstream desktop screenshots)
 
 The customizable home screen — a big clock and a 3-day weather glance in the
 header, with drag-and-drop tiles for today's events, the week ahead, meals,
@@ -31,184 +44,66 @@ The phone companion app (pair by QR, served by the display itself — no cloud):
 | --- | --- |
 | ![Companion lists](docs/screenshots/companion-lists.png) | ![Companion chores](docs/screenshots/companion-chores.png) |
 
-Every screenshot is generated from a clean install by `node scripts/shot-readme.mjs`,
-which seeds demo data through the app's real IPC layer — so they stay honest.
 
-## Status
 
-**All planned milestones (M0 – M6) complete**, plus auto-update and a customizable home screen:
+## Install or update
 
-- **Customizable Home screen** (the default view): a 12×6 tile dashboard you
-  arrange yourself — drag, resize, add, and remove tiles in a PIN-gated edit
-  mode with snap-to-grid ghosts. Eleven tile types: today's events, this-week
-  agenda, weather, chores progress, star balances, any list, today's meals,
-  clock, cycling photos, news headlines, live cameras, BirdNET-Go bird
-  detections (clock and weather
-  tiles are off by default — the header already shows both). Tapping a tile
-  jumps to its tab.
-- **Bird detections (BirdNET-Go)**: point a tile at your
-  [BirdNET-Go](https://github.com/tphakala/birdnet-go) instance on the LAN and
-  see the latest birds it heard — species, confidence, and a photo — refreshing
-  every ~20 seconds. Photos are proxied through the kiosk so the sandbox stays
-  intact; paste the dashboard URL and the app trims it to the right address.
-- **IP camera tiles (RTSP)**: add any camera's rtsp:// URL and watch it live on
-  the home screen (~1s latency). The bundled ffmpeg remuxes the camera's H.264
-  stream without transcoding (near-zero CPU) to a token-guarded localhost
-  WebSocket; camera URLs (which contain credentials) are encrypted with the OS
-  keystore (DPAPI on Windows, the system keyring on Linux) and never leave the
-  main process. Cameras must provide an H.264 stream (set the
-  camera substream to H.264 if tiles show "unavailable").
+Download the permanently signed APK from Releases when available, or the `OpenSkyLight-Android-signed` artifact from a successful Android workflow. Extract the artifact ZIP before installing.
 
-- Week / Day / Month / Agenda (List) views, touch-first with ≥48px targets
-- Family member profiles with per-person colors and filter chips
-- Local calendars with full event create/edit/delete from the screen
-- Recurring events (daily/weekly/monthly/yearly, weekday picker, end date) with
-  Google-style **this / this-and-following / all** edit and delete scopes
-- **Two-way Google Calendar sync**: loopback OAuth with PKCE (your own free
-  Google Cloud credentials), incremental pull with sync tokens (60s polling),
-  push of local edits with If-Match etags and last-writer-wins conflict
-  resolution, person assignments round-tripped via extended properties
-- **ICS feed subscriptions** (read-only, conditional GET, 30-minute refresh)
-- **Weather header** via Open-Meteo (no API key): current conditions plus the
-  next two days right in the header (on wide displays), tap for the full 5-day
-  forecast; city search and °F/°C in settings
-- **Parental PIN lock** (scrypt-hashed, enforced in the main process): settings,
-  calendar/people management, and sync configuration sit behind a 4–8 digit PIN
-- **Chores & routines**: per-child daily/weekly/one-time chores grouped into
-  morning/evening routines on a per-person chore board with big tap-to-check
-  circles; parents manage definitions behind the PIN
-- **Star rewards**: completed chores earn stars (append-only ledger, balance is
-  always the sum); kids redeem rewards from the board, parents approve pending
-  redemptions in settings
-- **Custom lists** (groceries, to-dos, anything): color-coded cards with
-  tap-to-check items, clear-done, shared by the whole family
-- **Phone companion app**: scan a QR code to pair, then edit lists, meals, and
-  chores from any phone on your Wi-Fi — served by the display itself, no cloud
-  (see "Companion app" below)
-- **Meal planning**: breakfast/lunch/dinner/snack per day, edited from a tap on
-  the meal strip in the Week and Day views
-- **Photo screensaver**: point it at a folder of family photos; after the
-  configured idle time it crossfades through them with a clock overlay (photos
-  are served through a sandbox-safe custom protocol, never direct file access)
-- **Sleep schedule**: the screen goes dark on a nightly window (overnight
-  ranges supported), the display power-save blocker is released so the OS can
-  power the panel down, and a tap wakes it for five minutes
-- Launch-on-startup toggle, single-instance lock, crash auto-relaunch
-- Built-in on-screen keyboard (no reliance on the Windows touch keyboard)
-- Warm "paper planner" visual design (Fraunces + Nunito, linen + ember palette)
-- **Dark mode that follows the sun**: by default the display switches to a warm
-  dark palette at sunset and back at sunrise — sun times computed locally from
-  your weather location (no network), falling back to 7pm–7am without one.
-  Settings → General → Appearance also offers always-Light / always-Dark.
-
-### Companion app (phones)
-
-Phones on your home Wi-Fi can edit **lists, meals, and chores** (and see a
-read-only week agenda) without walking to the display:
-
-1. On the display: Settings → General → **Companion app** → enable
-2. Tap **Pair a phone** and scan the QR code with the phone's camera
-3. On the phone, use the browser's **Add to Home Screen** — it installs like an
-   app with its own icon
-
-How it works and what to know:
-
-- The display itself serves the app on your network (default port 8420) — no
-  cloud, no accounts; everything stays in your house. Each QR scan pairs one
-  device; **Unpair all devices** in settings revokes every phone at once.
-- Pairing lives behind the parental PIN, and a paired phone gets parent-level
-  editing of lists/meals/chores only — it can never reach settings, sync
-  credentials, or cameras.
-- If a phone can't connect, allow OpenSkyLight through **Windows Firewall**
-  (Private networks) on the kiosk machine, or on Linux run
-  `sudo ufw allow 8420/tcp`.
-- Away-from-home access: run [Tailscale](https://tailscale.com) on the kiosk
-  and your phone and it works from anywhere, unchanged. (Traffic on your LAN is
-  plain HTTP — fine for a home network, which is the threat model here.)
-
-### Connecting Google Calendar
-
-1. Create a free Google Cloud project, enable the **Google Calendar API**
-2. Configure an OAuth consent screen (External, add yourself as a test user)
-3. Create an OAuth client of type **Desktop app**
-4. In the app: Settings → Calendars → paste the client ID + secret → Save & connect
-5. Sign in via the browser window that opens, then choose which calendars to sync
-
-### Ideas for later
-
-Recipe storage, drag-to-reorder lists, portrait-layout pass, hard panel
-power-off via the Win32 API, AI imports (Magic Import-style), companion
-mobile/web access.
-
-## Releases and auto-update
-
-Installed apps check GitHub Releases every 6 hours (and shortly after boot).
-Updates download in the background, show a "Restart now" pill on the display,
-and install themselves silently at 03:30 if nobody taps it.
-
-To ship a release:
-
-```bash
-npm version patch        # or minor/major — bumps package.json and creates the tag
-git push --follow-tags
+```powershell
+adb install -r app-release.apk
 ```
 
-The `Release` GitHub Action builds the installer on a Windows runner, runs the
-test suite, and publishes the release; every kiosk picks it up automatically.
+Alternatively open the APK on the tablet and allow installation from that source. Updates require the same signing certificate and a compatible version code. Moving from a differently signed debug APK requires uninstalling it first, which deletes local app data. Back up important data before uninstalling.
 
-## Kiosk setup (Windows)
+## Google Calendar setup
 
-1. `npm run dist`, then run the installer from `dist/` on the kiosk machine
-2. In the app: Settings → General → enable **Launch on startup**
-3. Windows Settings: set power options so the OS never sleeps (the app manages
-   display dimming through its own sleep schedule), enable auto-login
-4. The installed app runs fullscreen kiosk by default; launch with
-   `OpenSkyLight.exe --windowed` if you ever need a window
+1. Create or select a Google Cloud project and enable the Google Calendar API.
+2. Configure the OAuth consent screen and add your Google account as a test user if the project is in testing mode.
+3. Create an **Android** OAuth client with package name `com.jn90z.openskylight` and the installed APK signing certificate's SHA-1 fingerprint.
+4. In OpenSkyLight, open Settings → Google Calendar → Add Google account and grant Calendar access.
+5. Choose calendars and use Sync now to verify synchronization.
 
-## Kiosk setup (Linux)
+Use the permanent release certificate for official builds. Android authorization uses Google Play services, not the desktop OAuth client-secret flow. Calendar selection and synchronization should be verified on your device.
 
-Tested on Linux Mint 22 (Ubuntu 24.04 base) on an X11 session.
+## Tablet kiosk and companion
 
-1. `npm run dist -- --publish never`, then on the kiosk:
-   `sudo apt install ./dist/openskylight_<version>_amd64.deb`
-2. In the app: Settings → General → enable **Launch on startup** (writes
-   `~/.config/autostart/openskylight.desktop`)
-3. In the desktop settings: enable auto-login, and turn off the desktop's own
-   screensaver, screen lock, and suspend (including on lid close)
-4. Panel power-off during the sleep schedule uses `xset dpms` (package
-   `x11-xserver-utils`, usually preinstalled). On Wayland, or without `xset`,
-   the app falls back to a black screen
-5. Optional: `sudo apt install fonts-noto-color-emoji` for emoji, and
-   `sudo ufw allow 8420/tcp` if the firewall is on (for the companion app)
-6. Without a system keyring (gnome-keyring or KWallet), Google sign-ins and
-   camera URLs are stored unencrypted in `~/.config/openskylight`; Settings
-   shows a warning when that is the case
-7. The installed app runs fullscreen kiosk by default; launch with
-   `openskylight --windowed` if you ever need a window
+Use landscape orientation for the wall display. Immersive mode, photo screensaver and scheduled dimming are available in Settings. Android controls actual panel power. For unattended startup, see the [Android setup guide](docs/ANDROID_PORT.md).
 
-## Development
-
-```bash
-npm install        # also rebuilds better-sqlite3 for Electron
-npm run dev        # windowed dev mode with hot reload
-npm run dev -- --kiosk   # fullscreen kiosk in dev
-npm run dev:companion    # companion web app with hot reload (proxies /api to a running kiosk)
-npm test           # unit tests (run inside Electron's Node for the native module)
-npm run typecheck
-node scripts/e2e-smoke.mjs   # launches the built app and creates an event end-to-end
-npm run dist       # NSIS installer + portable exe (Windows), .deb (Linux)
-```
-
-Production builds run fullscreen kiosk by default; pass `--windowed` to opt out.
-Data lives in SQLite at `%APPDATA%/openskylight/openskylight.db` on Windows and
-`~/.config/openskylight/openskylight.db` on Linux.
+Enable the phone companion in Settings and pair a phone using the QR code on the same trusted Wi-Fi network. See [companion setup](docs/ANDROID_COMPANION.md).
 
 ## Architecture
 
-- **Electron + React 19 + TypeScript**, bundled with electron-vite
-- **SQLite (better-sqlite3 + Drizzle)** in the main process is the single source of truth
-- Renderer is fully sandboxed; all access goes through a **typed IPC contract**
-  (`src/shared/ipc/contract.ts`) with zod validation at the main-process boundary
-- Recurrence is stored as RRULE masters + exception rows and expanded at query
-  time in `src/shared/recurrence/expand.ts` (rrule + Luxon, DST-safe, heavily unit-tested)
-- State: TanStack Query over IPC + Zustand for view state
+- Shared React and TypeScript UI running in Android System WebView through Capacitor.
+- QuickJS backend and native SQLite with WAL and foreign keys.
+- Native Android services for authorization, media, secure storage and kiosk behavior.
+- Bounded native HTTP listener for the optional LAN companion.
+- Node.js is used at build time; Electron is not bundled into the APK.
+
+## Build from source
+
+Use Node 22, JDK 21, Android SDK Platform 35 and the required build tools.
+
+```bash
+git clone --branch android https://github.com/jn90z/openskylight-apkport.git
+cd openskylight-apkport
+npm ci --ignore-scripts
+npm run typecheck
+npm rebuild better-sqlite3
+npx --no-install vitest run
+node scripts/android-prepare.mjs
+cd android
+./gradlew testDebugUnitTest assembleDebug
+```
+
+On Windows use `gradlew.bat` instead of `./gradlew`. See [performance testing](docs/ANDROID_PERFORMANCE.md) and [Android build instructions](docs/ANDROID_PORT.md).
+
+## Release signing
+
+GitHub Actions supports persistent release signing using repository secrets `OSL_KEYSTORE_BASE64`, `OSL_KEYSTORE_PASSWORD`, `OSL_KEY_ALIAS` and `OSL_KEY_PASSWORD`, plus repository variable `OSL_CERT_SHA256` (certificate digest without colons). Never commit the keystore or passwords. Use the signed APK for normal installation; debug APKs are for testing.
+
+## Project status and attribution
+
+This is an Android port of OpenSkyLight, not the original desktop distribution. Automated tests do not replace physical tablet verification. Consult the verification matrix for current coverage.
+
+The original desktop documentation and source remain on the [main branch](https://github.com/jn90z/openskylight-apkport/tree/main). Original authors and contributors retain their attribution under the repository license. See [LICENSE](LICENSE).
