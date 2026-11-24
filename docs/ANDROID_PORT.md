@@ -36,6 +36,13 @@ account as a test user if the consent screen is in testing. Use the SHA-1 from
 `apksigner verify --print-certs app-release.apk`. Debug and release APKs signed
 by different keys need separate OAuth clients.
 
+If the Google flow closes after you approve access, check that the **Android**
+OAuth client uses the certificate from the APK you actually installed. Each CI
+debug build may use a different certificate. Registering the SHA-1 from a
+previous build or from the release key will not match a differently signed APK.
+The app shows the installed SHA-1 when Google returns a configuration error
+or closes the flow without an available Calendar grant.
+
 On the tablet, choose **Settings → Google Calendar → Add Google account**, choose
 the account and grant Calendar permission. Select the calendars to sync. Google
 Play services manages refresh and app access tokens stay in memory. Read-only

@@ -4,6 +4,7 @@ import android.accounts.Account
 import android.accounts.AccountManager
 import android.app.Activity
 import android.content.Context
+import android.content.pm.PackageManager
 import android.os.Handler
 import android.os.Looper
 import com.google.android.gms.auth.api.identity.AuthorizationRequest
@@ -16,6 +17,7 @@ import com.google.android.gms.common.GoogleApiAvailability
 import com.google.android.gms.common.api.ApiException
 import com.google.android.gms.common.api.Scope
 import org.json.JSONObject
+import java.security.MessageDigest
 
 internal class NativeGoogle(private val context: Context, private val backend: Backend) {
     private val main = Handler(Looper.getMainLooper())
@@ -88,15 +90,30 @@ internal class NativeGoogle(private val context: Context, private val backend: B
                 } else {
                     try {
                         activity.resolveGoogleAuthorization(resolution) { response ->
-                            main.removeCallbacks(timeout)
-                            if (response.resultCode != Activity.RESULT_OK) {
-                                finish(null, "Google sign-in was cancelled")
-                            } else {
-                                try {
-                                    finishGrant(client.getAuthorizationResultFromIntent(response.data))
-                                } catch (error: ApiException) {
-                                    finish(null, errorMessage(error))
-                                }
+                            if (finished) return@resolveGoogleAuthorization
+                            val failure = try {
+                                val grant = client.getAuthorizationResultFromIntent(response.data)
+                                main.removeCallbacks(timeout)
+                                finishGrant(grant)
+                                return@resolveGoogleAuthorization
+                            } catch (error: ApiException) {
+                                error
+                            }
+                            if (response.resultCode == Activity.RESULT_OK || failure.statusCode in setOf(7, 10)) {
+                                main.removeCallbacks(timeout)
+                                finish(null, errorMessage(failure))
+                                return@resolveGoogleAuthorization
+                            }
+
+                            // A consent UI can close without returning a usable result Intent.
+                            // Check the grant for the selected account once, without reopening consent.
+                            client.authorize(request).addOnSuccessListener { retry ->
+                                main.removeCallbacks(timeout)
+                                if (retry.hasResolution()) finish(null, incompleteAuthorization(failure))
+                                else finishGrant(retry)
+                            }.addOnFailureListener { error ->
+                                main.removeCallbacks(timeout)
+                                finish(null, errorMessage(error))
                             }
                         }
                     } catch (_: Exception) {
@@ -119,10 +136,26 @@ internal class NativeGoogle(private val context: Context, private val backend: B
         }
     }
 
+    private fun incompleteAuthorization(error: ApiException): String {
+        return "Google did not return a Calendar grant (status ${error.statusCode}). " +
+            "If you approved access, check the Android OAuth client for ${context.packageName} " +
+            "and this APK’s signing SHA-1${signingFingerprint()}."
+    }
+
+    @Suppress("DEPRECATION")
+    private fun signingFingerprint(): String = runCatching {
+        val info = context.packageManager.getPackageInfo(context.packageName, PackageManager.GET_SIGNING_CERTIFICATES)
+        val signer = info.signingInfo?.apkContentsSigners?.singleOrNull()?.toByteArray()
+            ?: return@runCatching ""
+        val digest = MessageDigest.getInstance("SHA-1").digest(signer)
+        ": " + digest.joinToString(":") { "%02X".format(it.toInt() and 0xff) }
+    }.getOrDefault("")
+
     private fun errorMessage(error: Exception): String {
         val code = (error as? ApiException)?.statusCode
         return when (code) {
-            10 -> "Google rejected this app's signing certificate. Register this APK with the Calendar OAuth project."
+            10 -> "Google rejected this Android OAuth configuration. Register ${context.packageName} " +
+                "with this APK’s signing SHA-1${signingFingerprint()}."
             7 -> "Could not reach Google. Check the tablet's internet connection."
             else -> "Google could not authorize Calendar${code?.let { " ($it)" }.orEmpty()}. Reconnect the account."
         }

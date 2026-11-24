@@ -45,10 +45,18 @@ jobs:
       - name: Build and unit test debug APK
         working-directory: android
         run: ./gradlew testDebugUnitTest assembleDebug --stacktrace --no-daemon --max-workers=2
+      - name: Report the debug APK's OAuth signing fingerprint
+        working-directory: android
+        run: |
+          signer="$(find "$ANDROID_HOME/build-tools" -name apksigner | sort -V | tail -1)"
+          "$signer" verify --print-certs app/build/outputs/apk/debug/app-debug.apk | tee app/build/outputs/apk/debug/signing-certificate.txt
+          cat app/build/outputs/apk/debug/signing-certificate.txt >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@v6
         with:
           name: OpenSkyLight-Android-debug
-          path: android/app/build/outputs/apk/debug/app-debug.apk
+          path: |
+            android/app/build/outputs/apk/debug/app-debug.apk
+            android/app/build/outputs/apk/debug/signing-certificate.txt
           if-no-files-found: error
       - name: Enable KVM for Android instrumentation
         run: |
