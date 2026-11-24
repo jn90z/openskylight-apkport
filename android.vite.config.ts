@@ -7,15 +7,16 @@ import { resolve } from 'node:path'
 export default defineConfig({
   root: resolve(__dirname, 'src/renderer'),
   base: './',
+  build: {
+    outDir: resolve(__dirname, 'out/android'),
+    emptyOutDir: true,
+    rollupOptions: { input: resolve(__dirname, 'src/renderer/android.html') }
+  },
   plugins: [react(), tailwindcss()],
   resolve: {
     alias: {
       '@shared': resolve(__dirname, 'src/shared'),
       '@renderer': resolve(__dirname, 'src/renderer/src')
     }
-  },
-  build: {
-    outDir: resolve(__dirname, 'out/android'),
-    emptyOutDir: true
   }
 })
