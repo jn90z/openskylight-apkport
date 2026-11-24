@@ -72,4 +72,14 @@ tasks.register('verifyOpenSkyLightAssets') {
         }
     }
 }
+tasks.register('verifyReleaseSigning') {
+    doLast {
+        for (def name : ['OSL_KEYSTORE_PATH', 'OSL_KEYSTORE_PASSWORD', 'OSL_KEY_ALIAS', 'OSL_KEY_PASSWORD']) {
+            if (!System.getenv(name)) throw new GradleException('Release signing requires ' + name)
+        }
+        if (!file(signingPath).isFile()) throw new GradleException('Release keystore does not exist')
+    }
+}
+tasks.matching { it.name == 'preReleaseBuild' }.configureEach { dependsOn 'verifyReleaseSigning' }
+
 tasks.named('preBuild').configure { dependsOn 'verifyOpenSkyLightAssets' }

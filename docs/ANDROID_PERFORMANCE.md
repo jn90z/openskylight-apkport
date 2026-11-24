@@ -39,3 +39,33 @@ under 2% idle CPU averaged over five minutes, under five seconds to visible
 calendar, and under 30 MB APK size**. Compare the first and last samples of the
 soak. Investigate persistent PSS growth, thermal throttling, ANRs, renderer
 restarts and interrupted sync. Report measured values alongside the scenarios.
+
+## Review of the November 24 tablet diagnostic capture
+
+The capture identifies an SM-T510 running Android 11. The app process has
+105,633 KB reported total PSS, 102,576 KB RSS and 55,670 KB swap PSS.
+Its summary reports 27,012 KB graphics memory and SQLite reports 630 KB used
+with a 176 KB database. Android's total PSS accounting in this capture includes
+swap, so these totals must not be added as independent resident allocations.
+
+The capture includes one app memory sample and omits a separate WebView
+renderer memory dump. It cannot establish combined steady-state usage,
+a memory leak, or the 24-hour memory target. The empty crash file contains
+no recorded crash, and does not establish that the process never restarted.
+
+Graphics records 66 janky frames out of 70, a 65 ms median, and a 1,300 ms
+99th percentile. This small sample demonstrates poor responsiveness during
+the sampled activity. It needs a repeatable release-build measurement with
+a reset graphics counter and an identified interaction before attributing
+the delays to an app component. GPU histogram values at the final bucket
+are insufficient to assign a precise GPU duration.
+
+The CPU report covers 14:33:02–14:37:29 device time, before the captured
+Google authorization attempts around 14:40. OpenSkyLight is absent from
+that report. Gmail leads its process list at 20%, while kswapd0 accounts
+for 1.4%. These values provide system context but cannot measure the app's
+idle CPU. Battery snapshots likewise lack a controlled app-only baseline.
+
+For release acceptance, record the app and renderer PSS at startup, 10 minutes,
+one hour and 24 hours. Reset gfxinfo before a fixed calendar scrolling and
+editing sequence, then compare the signed release to the debug capture.
