@@ -12,6 +12,10 @@
   <body>
     <div id="root"></div>
     <script>
+      // Android 9 can ship a WebView with ES modules but without globalThis.
+      if (typeof globalThis === 'undefined') {
+        Object.defineProperty(window, 'globalThis', { value: window, writable: true, configurable: true });
+      }
       // A failed module load on an old system WebView otherwise leaves a blank screen.
       window.setTimeout(function () {
         var root = document.getElementById('root');
