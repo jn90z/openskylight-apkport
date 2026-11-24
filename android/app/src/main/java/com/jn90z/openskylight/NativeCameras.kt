@@ -7,9 +7,11 @@ import android.view.Gravity
 import android.view.TextureView
 import android.view.View
 import android.widget.FrameLayout
+import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
+import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.rtsp.RtspMediaSource
 import org.json.JSONObject
@@ -39,7 +41,12 @@ internal class NativeCameras(
             importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
         }
         container.addView(view, FrameLayout.LayoutParams(1, 1, Gravity.TOP or Gravity.LEFT))
-        val player = ExoPlayer.Builder(context).build()
+        val loadControl = DefaultLoadControl.Builder()
+            .setBufferDurationsMs(1_000, 5_000, 250, 500)
+            .build()
+        val player = ExoPlayer.Builder(context).setLoadControl(loadControl).build()
+        player.trackSelectionParameters = player.trackSelectionParameters.buildUpon()
+            .setTrackTypeDisabled(C.TRACK_TYPE_AUDIO, true).build()
         active = Session(request.getString("cameraId"), id, player, view)
         player.volume = 0f
         player.setVideoTextureView(view)
@@ -58,8 +65,17 @@ internal class NativeCameras(
             }
         })
         try {
-            val item = MediaItem.fromUri(Uri.parse(request.getString("url")))
-            player.setMediaSource(RtspMediaSource.Factory().setForceUseRtpTcp(true).setTimeoutMs(10_000).createMediaSource(item))
+            val uri = Uri.parse(request.getString("url"))
+            val source = RtspMediaSource.Factory().setForceUseRtpTcp(true).setTimeoutMs(10_000)
+            val mediaUri = if (uri.scheme.equals("rtsps", ignoreCase = true)) {
+                val port = if (uri.port < 0) 322 else uri.port
+                val host = checkNotNull(uri.host)
+                source.setSocketFactory(RtspTlsSocketFactory(host, port))
+                val authority = checkNotNull(uri.encodedAuthority)
+                val rewrittenAuthority = if (uri.port < 0) "$authority:$port" else authority
+                uri.buildUpon().scheme("rtsp").encodedAuthority(rewrittenAuthority).build()
+            } else uri
+            player.setMediaSource(source.createMediaSource(MediaItem.fromUri(mediaUri)))
             player.prepare()
             player.play()
         } catch (_: Exception) {

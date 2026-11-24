@@ -13,20 +13,22 @@ run('npx', ['--no-install', 'vite', 'build', '--config', 'companion.vite.config.
 run('npx', ['--no-install', 'cap', 'sync', 'android'])
 rmSync('out/companion-package/companion', { recursive: true, force: true })
 cpSync('out/companion', 'out/companion-package/companion', { recursive: true })
-mkdirSync('android/app/build/generated/oslAssets', { recursive: true })
+mkdirSync('out/android-backend', { recursive: true })
 await build({
   entryPoints: ['src/android/backend.ts'],
-  outfile: 'android/app/build/generated/oslAssets/backend.js',
+  outfile: 'out/android-backend/backend.js',
   bundle: true,
   format: 'iife',
   platform: 'neutral',
   mainFields: ['browser', 'module', 'main'],
-  target: 'es2022',
+  // QuickJS 2024 misparses a class field named get. Lower class fields in this bundle.
+  target: 'es2020',
   minify: true,
   alias: {
     '@shared': './src/shared',
     'better-sqlite3': './src/android/sqlite.ts',
     'node:crypto': './src/android/crypto.ts',
-    '@googleapis/calendar': './src/android/google-calendar.ts'
+    '@googleapis/calendar': './src/android/google-calendar.ts',
+    'fast-xml-parser': './src/android/xml.ts'
   }
 })

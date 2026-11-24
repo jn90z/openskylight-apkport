@@ -61,7 +61,7 @@ internal class NativeGoogle(private val context: Context, private val backend: B
         }
         fun finishGrant(result: AuthorizationResult) {
             val token = result.accessToken
-            if (token.isNullOrBlank() || scope !in result.grantedScopes) {
+            if (token.isNullOrBlank() || scope !in result.grantedScopes.orEmpty()) {
                 finish(null, "Google Calendar access was not granted")
             } else {
                 finish(JSONObject().put("email", email).put("token", token), null)

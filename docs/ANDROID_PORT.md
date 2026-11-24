@@ -44,9 +44,10 @@ demand or reconnect a removed or expired account in Settings.
 
 ### Cameras, feeds and kiosk
 
-- Use `rtsp://` cameras that provide H.264 with SDP parameter sets. Select a
+- Use `rtsp://` or `rtsps://` cameras that provide H.264 with SDP parameter sets. Select a
   matching substream on the camera if its default stream uses another codec.
-  Media3 uses RTP over TCP and allows one active video decoder. Camera URLs are
+  Media3 uses RTP over TCP and allows one active video decoder. RTSPS requires
+  a certificate the tablet trusts. Camera URLs are
   encrypted with Android Keystore.
 - Weather city search uses Open-Meteo. News uses the existing RSS presets.
   BirdNET tiles connect to the BirdNET-Go service and request its species
@@ -77,7 +78,7 @@ node scripts/android-prepare.mjs
 cd android
 ./gradlew testDebugUnitTest assembleDebug
 # With a compatible emulator or USB-authorized tablet attached:
-./gradlew connectedDebugAndroidTest
+./gradlew :app:connectedDebugAndroidTest
 ```
 
 The Android preparation step bundles both React apps and the backend, then runs

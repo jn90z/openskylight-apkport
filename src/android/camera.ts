@@ -24,7 +24,6 @@ export function createAndroidCamera(settings: SettingsService) {
     },
     add(name: string, url: string) {
       if (!isValidRtspUrl(url)) throw invalid('Enter a valid RTSP camera URL')
-      if (new URL(url).protocol !== 'rtsp:') throw invalid('Android camera playback requires rtsp://')
       const id = uuidv7()
       save([...read(), { id, name, encryptedUrl: host('encrypt', url) }])
       return { id, name }

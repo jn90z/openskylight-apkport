@@ -23,7 +23,7 @@ android {
     kotlinOptions { jvmTarget = '21' }
     buildFeatures { buildConfig true }
     sourceSets {
-        main.assets.srcDir layout.buildDirectory.dir('generated/oslAssets')
+        main.assets.srcDir '../../out/android-backend'
         main.assets.srcDir '../../out/companion-package'
     }
     signingConfigs {
@@ -63,3 +63,13 @@ dependencies {
 }
 
 apply from: 'capacitor.build.gradle'
+
+tasks.register('verifyOpenSkyLightAssets') {
+    doLast {
+        for (def path : ['../../out/android-backend/backend.js', '../../out/companion-package/companion/index.html',
+                         'src/main/assets/public/index.html']) {
+            if (!file(path).isFile()) throw new GradleException('Run node scripts/android-prepare.mjs from the repository root')
+        }
+    }
+}
+tasks.named('preBuild').configure { dependsOn 'verifyOpenSkyLightAssets' }

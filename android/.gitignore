@@ -103,3 +103,6 @@ app/src/main/res/xml/config.xml
 # Capacitor-generated wiring
 /capacitor.settings.gradle
 /app/capacitor.build.gradle
+
+# Kotlin compiler working files
+/.kotlin/

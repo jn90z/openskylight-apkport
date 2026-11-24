@@ -12,6 +12,7 @@ import java.nio.charset.StandardCharsets.UTF_8
 import java.util.concurrent.ArrayBlockingQueue
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.RejectedExecutionException
+import java.util.concurrent.ScheduledThreadPoolExecutor
 import java.util.concurrent.ThreadPoolExecutor
 import java.util.concurrent.TimeUnit
 import kotlin.concurrent.thread
@@ -35,6 +36,7 @@ internal class LocalHttpServer(
     private val pool = ThreadPoolExecutor(workers, workers, 30, TimeUnit.SECONDS, ArrayBlockingQueue(8)).apply {
         allowCoreThreadTimeOut(true)
     }
+    private val deadlines = ScheduledThreadPoolExecutor(1).apply { removeOnCancelPolicy = true }
     val port: Int get() = listener.localPort
 
     init {
@@ -45,8 +47,14 @@ internal class LocalHttpServer(
                 connections.add(socket)
                 try {
                     pool.execute {
-                        try { socket.use(::serve) } catch (_: Exception) { /* client disconnected */ }
-                        finally { connections.remove(socket) }
+                        try {
+                            val deadline = deadlines.schedule({ runCatching { socket.close() } }, 25, TimeUnit.SECONDS)
+                            try { socket.use(::serve) } finally { deadline.cancel(false) }
+                        } catch (_: Exception) {
+                            runCatching { socket.close() }
+                        } finally {
+                            connections.remove(socket)
+                        }
                     }
                 } catch (_: RejectedExecutionException) {
                     connections.remove(socket)
@@ -94,6 +102,7 @@ internal class LocalHttpServer(
         listener.close()
         connections.forEach { runCatching { it.close() } }
         pool.shutdownNow()
+        deadlines.shutdownNow()
     }
 
     data class Request(

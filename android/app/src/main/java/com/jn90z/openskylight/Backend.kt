@@ -60,6 +60,10 @@ internal class Backend private constructor(private val context: Context) {
                             val payload = JSONTokener(args[1] as String).nextValue()
                             asciiJson(JSONObject().put("data", handle(args[0] as String, payload) ?: JSONObject.NULL).toString())
                         } catch (error: Exception) {
+                            val operation = args[0] as String
+                            if (BuildConfig.DEBUG && operation.startsWith("sql")) {
+                                Log.w(TAG, "Native SQLite operation failed: $operation", error)
+                            }
                             val message = if (error is PlatformException) error.message else "Android operation failed"
                             asciiJson(JSONObject().put("error", message).toString())
                         }
@@ -214,6 +218,7 @@ internal class Backend private constructor(private val context: Context) {
             }
         }
         "photos" -> JSONArray(photos.list(payload as String))
+        "parseFeedXml" -> FeedXml.parse(payload as String)
         "launchAtBoot" -> context.getSharedPreferences("android-platform", Context.MODE_PRIVATE).edit()
             .putBoolean("launchAtBoot", payload as Boolean).apply()
         "displaySleep" -> {

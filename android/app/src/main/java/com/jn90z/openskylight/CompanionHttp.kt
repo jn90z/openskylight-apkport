@@ -2,6 +2,7 @@ package com.jn90z.openskylight
 
 import android.content.Context
 import android.net.ConnectivityManager
+import android.net.LinkAddress
 import android.net.NetworkCapabilities
 import android.net.Uri
 import android.os.SystemClock
@@ -36,13 +37,14 @@ internal class CompanionHttp(private val context: Context, private val backend: 
     }
 
     fun status(port: Int): JSONObject {
-        val urls = if (server != null) lanAddresses().map { "http://${it.hostAddress}:$port/" } else emptyList()
+        val urls = if (server != null) lanAddresses().map { "http://${it.address.hostAddress}:$port/" }.distinct() else emptyList()
         return JSONObject().put("running", server != null).put("port", port)
             .put("urls", org.json.JSONArray(urls))
             .put("lastError", lastError ?: JSONObject.NULL)
     }
 
-    private fun lanAddresses(): List<Inet4Address> {
+    @Suppress("DEPRECATION")
+    private fun lanAddresses(): List<LinkAddress> {
         val connectivity = context.getSystemService(ConnectivityManager::class.java)
         return connectivity.allNetworks.flatMap { network ->
             val info = connectivity.getNetworkCapabilities(network)
@@ -50,8 +52,21 @@ internal class CompanionHttp(private val context: Context, private val backend: 
                 info?.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET) != true
             ) return@flatMap emptyList()
             connectivity.getLinkProperties(network)?.linkAddresses.orEmpty()
-                .map { it.address }.filterIsInstance<Inet4Address>()
-        }.filter { it.isSiteLocalAddress }.distinct()
+        }.filter { it.address is Inet4Address && it.address.isSiteLocalAddress }.distinct()
+    }
+
+    private fun LinkAddress.contains(peer: InetAddress): Boolean {
+        if (peer !is Inet4Address || !peer.isSiteLocalAddress) return false
+        val target = address.address
+        val actual = peer.address
+        var bits = prefixLength
+        for (i in target.indices) {
+            if (bits <= 0) return true
+            val mask = (0xff shl (8 - minOf(bits, 8))) and 0xff
+            if (((target[i].toInt() xor actual[i].toInt()) and mask) != 0) return false
+            bits -= 8
+        }
+        return true
     }
 
     @Synchronized
@@ -69,7 +84,7 @@ internal class CompanionHttp(private val context: Context, private val backend: 
         // Companion is opt-in and accepts only private LAN clients. Check Host
         // against the tablet's current IPs before serving a page or any API.
         val host = req.headers["host"]?.substringBefore(':')
-        if (!req.remote.isSiteLocalAddress || lanAddresses().none { it.hostAddress == host }) {
+        if (lanAddresses().none { it.address.hostAddress == host && it.contains(req.remote) }) {
             res.text(403, "Open this app using the tablet's companion address")
             return
         }
