@@ -1,5 +1,6 @@
 package com.jn90z.openskylight
 
+import android.app.PendingIntent
 import android.content.Intent
 import android.os.Bundle
 import android.view.WindowManager
@@ -8,6 +9,8 @@ import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
 import android.webkit.WebView
 import android.widget.FrameLayout
+import androidx.activity.result.ActivityResult
+import androidx.activity.result.IntentSenderRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
@@ -20,6 +23,18 @@ import java.net.URL
 
 class MainActivity : BridgeActivity() {
     private var pendingFolder: ((String?) -> Unit)? = null
+    private var pendingAccount: ((ActivityResult) -> Unit)? = null
+    private var pendingAuthorization: ((ActivityResult) -> Unit)? = null
+    private val googleAccounts = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        val callback = pendingAccount
+        pendingAccount = null
+        callback?.invoke(result)
+    }
+    private val googleAuthorization = registerForActivityResult(ActivityResultContracts.StartIntentSenderForResult()) { result ->
+        val callback = pendingAuthorization
+        pendingAuthorization = null
+        callback?.invoke(result)
+    }
     private val selectFolder = registerForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
         val folder = uri?.let {
             runCatching {
@@ -80,6 +95,11 @@ class MainActivity : BridgeActivity() {
     override fun onDestroy() {
         pendingFolder?.invoke(null)
         pendingFolder = null
+        val cancelled = ActivityResult(RESULT_CANCELED, null)
+        pendingAccount?.invoke(cancelled)
+        pendingAuthorization?.invoke(cancelled)
+        pendingAccount = null
+        pendingAuthorization = null
         super.onDestroy()
     }
 
@@ -94,6 +114,24 @@ class MainActivity : BridgeActivity() {
         } catch (_: Exception) {
             pendingFolder = null
             callback(null)
+        }
+    }
+
+    internal fun pickGoogleAccount(intent: Intent, callback: (ActivityResult) -> Unit) {
+        check(pendingAccount == null)
+        pendingAccount = callback
+        try { googleAccounts.launch(intent) } catch (error: Exception) {
+            pendingAccount = null
+            throw error
+        }
+    }
+
+    internal fun resolveGoogleAuthorization(resolution: PendingIntent, callback: (ActivityResult) -> Unit) {
+        check(pendingAuthorization == null)
+        pendingAuthorization = callback
+        try { googleAuthorization.launch(IntentSenderRequest.Builder(resolution).build()) } catch (error: Exception) {
+            pendingAuthorization = null
+            throw error
         }
     }
 

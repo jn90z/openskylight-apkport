@@ -30,7 +30,3 @@ export function timingSafeEqual(a: Uint8Array, b: Uint8Array): boolean {
   for (let i = 0; i < a.length; i++) difference |= a[i] ^ b[i]
   return difference === 0
 }
-
-export function base64url(value: Uint8Array): string {
-  return Buffer.from(value).toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
-}

@@ -21,7 +21,7 @@ import { formatDuration } from '@shared/timer'
 import { startAlarm, stopAlarm } from '../../lib/alarm'
 import { weatherIcon } from '../weather/WeatherHeader'
 import { SLOT_META } from '../meals/Meals'
-import { ZONE } from '../../stores/uiStore'
+import { useUi, ZONE } from '../../stores/uiStore'
 import { formatTime, initials, textOn } from '../../lib/format'
 import { occurrenceColor } from '../../lib/colors'
 import { CheckIcon } from '../../components/icons'
@@ -515,6 +515,8 @@ export function CameraTile({ tile }: TileProps) {
 
   const [visible, setVisible] = useState(!document.hidden)
   const positionCamera = window.osl.androidCameraPosition
+  const overlayOpen = useUi((state) => state.settingsOpen || state.editor.mode !== 'closed')
+  const suspendCamera = covered || (positionCamera !== undefined && overlayOpen)
   useEffect(() => {
     if (!positionCamera) return
     const update = (): void => setVisible(!document.hidden)
@@ -524,7 +526,7 @@ export function CameraTile({ tile }: TileProps) {
 
   useEffect(() => {
     const video = videoRef.current
-    if (!cameraId || !cameraFound || !video || covered || !visible) return
+    if (!cameraId || !cameraFound || !video || suspendCamera || !visible) return
     if (positionCamera) {
       return connectAndroidCamera(cameraId, video, positionCamera, setStatus, () => setRetryKey((key) => key + 1))
     }
@@ -589,7 +591,7 @@ export function CameraTile({ tile }: TileProps) {
       }
       if (sessionId) void ipcInvoke('camera:stop', { sessionId })
     }
-  }, [cameraId, cameraFound, covered, positionCamera, retryKey, visible])
+  }, [cameraId, cameraFound, positionCamera, retryKey, suspendCamera, visible])
 
   if (!cameraId || camerasLoading) return <Placeholder>Connecting…</Placeholder>
   if (!camera) return <Placeholder>Camera not found — re-add this tile</Placeholder>
@@ -623,13 +625,11 @@ function connectAndroidCamera(
   let retryTimer: number | undefined
   let frame = 0
   let inView = true
-  let live = false
   let earlyState: { sessionId: string; state: string } | undefined
   setStatus('connecting')
 
   const fail = (): void => {
     if (disposed || retryTimer !== undefined) return
-    live = false
     setStatus('error')
     if (sessionId) void ipcInvoke('camera:stop', { sessionId }).catch(() => undefined)
     retryTimer = window.setTimeout(retry, CAMERA_RETRY_MS)
@@ -643,7 +643,7 @@ function connectAndroidCamera(
       const rect = element.getBoundingClientRect()
       void position({
         sessionId, left: rect.left, top: rect.top + 28, width: rect.width,
-        height: Math.max(0, rect.height - 28), visible: live && inView && !document.hidden
+        height: Math.max(0, rect.height - 28), visible: inView && !document.hidden
       }).catch(fail)
     })
   }
@@ -651,7 +651,6 @@ function connectAndroidCamera(
     if (!sessionId) { earlyState = { sessionId: id, state }; return }
     if (sessionId !== id || disposed) return
     if (state === 'live') {
-      live = true
       setStatus('live')
       window.clearTimeout(watchdog)
       update()
@@ -675,6 +674,7 @@ function connectAndroidCamera(
       void ipcInvoke('camera:stop', { sessionId }).catch(() => undefined)
       return
     }
+    update()
     if (earlyState) applyState(earlyState)
   }).catch(fail)
 

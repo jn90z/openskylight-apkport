@@ -1,4 +1,4 @@
-import { cpSync, mkdirSync, renameSync } from 'node:fs'
+import { cpSync, mkdirSync, renameSync, rmSync } from 'node:fs'
 import { spawnSync } from 'node:child_process'
 import { build } from 'esbuild'
 
@@ -11,6 +11,7 @@ run('npx', ['--no-install', 'vite', 'build', '--config', 'android.vite.config.ts
 renameSync('out/android/android.html', 'out/android/index.html')
 run('npx', ['--no-install', 'vite', 'build', '--config', 'companion.vite.config.ts'])
 run('npx', ['--no-install', 'cap', 'sync', 'android'])
+rmSync('out/companion-package/companion', { recursive: true, force: true })
 cpSync('out/companion', 'out/companion-package/companion', { recursive: true })
 mkdirSync('android/app/build/generated/oslAssets', { recursive: true })
 await build({

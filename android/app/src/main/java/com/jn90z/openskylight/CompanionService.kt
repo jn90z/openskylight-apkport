@@ -26,7 +26,7 @@ class CompanionService : Service() {
             .setOngoing(true)
             .build())
         Backend.get(this)
-        return START_NOT_STICKY
+        return START_STICKY
     }
 
     companion object {

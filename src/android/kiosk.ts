@@ -46,7 +46,7 @@ export function createAndroidKiosk(settings: SettingsService, broadcast: (channe
     apply, reportActivity,
     getLaunchOnStartup: (stored: boolean) => stored,
     setLaunchOnStartup: (enabled: boolean) => { host('launchAtBoot', enabled) },
-    previewScreensaver: () => { setScreensaver(true) },
+    previewScreensaver: () => { broadcast('push:kioskIdle', { state: 'screensaver' }) },
     listPhotos: () => {
       const folder = settings.getAll().screensaver.folder
       return folder ? host<string[]>('photos', folder) : []

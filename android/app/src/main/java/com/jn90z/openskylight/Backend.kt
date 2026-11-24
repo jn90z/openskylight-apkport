@@ -37,7 +37,7 @@ internal class Backend private constructor(private val context: Context) {
     private val timers = mutableMapOf<Int, Runnable>()
     private val companion = CompanionHttp(context, this)
     private val photos = PhotoLibrary(context)
-    private val oauth = BrowserAuthorization(this)
+    private val google = NativeGoogle(context, this)
     private val boot = CompletableFuture<Boolean>()
     private lateinit var sqlite: NativeSqlite
     private lateinit var engine: QuickJs
@@ -46,6 +46,7 @@ internal class Backend private constructor(private val context: Context) {
     @Volatile private var sleeping = false
     @Volatile private var kioskState = "active"
     @Volatile private var visible = false
+    private val dirtyDomains = ConcurrentHashMap.newKeySet<String>()
 
     init {
         scope.launch {
@@ -57,10 +58,10 @@ internal class Backend private constructor(private val context: Context) {
                     defineBinding("androidHost", FunctionBinding { args ->
                         try {
                             val payload = JSONTokener(args[1] as String).nextValue()
-                            JSONObject().put("data", handle(args[0] as String, payload) ?: JSONObject.NULL).toString()
+                            asciiJson(JSONObject().put("data", handle(args[0] as String, payload) ?: JSONObject.NULL).toString())
                         } catch (error: Exception) {
                             val message = if (error is PlatformException) error.message else "Android operation failed"
-                            JSONObject().put("error", message).toString()
+                            asciiJson(JSONObject().put("error", message).toString())
                         }
                     })
                 }
@@ -120,7 +121,14 @@ internal class Backend private constructor(private val context: Context) {
 
     fun setVisible(next: Boolean) {
         visible = next
-        if (next) emitState()
+        if (next) {
+            emitState()
+            for (domain in dirtyDomains.toList()) {
+                if (dirtyDomains.remove(domain)) ui.post {
+                    plugin?.push("push:dataChanged", JSONObject().put("domain", domain))
+                }
+            }
+        }
     }
 
     fun emitState() {
@@ -130,15 +138,11 @@ internal class Backend private constructor(private val context: Context) {
         }
     }
 
-    fun rendererActivity() {
-        boot.thenAccept { ready -> if (ready) scope.launch { runCatching { evaluate("oslActivity", JSONArray()) } } }
-    }
-
     fun photo(uri: String) = photos.open(uri)
 
     private suspend fun evaluate(name: String, args: JSONArray) {
         // Treat the arguments as data even when a string contains JavaScript source.
-        val encoded = JSONObject.quote(args.toString()).replace("\u2028", "\\u2028").replace("\u2029", "\\u2029")
+        val encoded = asciiJson(JSONObject.quote(args.toString()))
         engine.evaluate<Any?>("void $name(...JSON.parse($encoded))")
     }
 
@@ -193,11 +197,13 @@ internal class Backend private constructor(private val context: Context) {
         "timer" -> (payload as JSONArray).let { schedule(it.getLong(0), it.getBoolean(1)) }
         "cancelTimer" -> timers.remove((payload as Number).toInt())?.let { ui.removeCallbacks(it) }
         "fetch" -> startFetch(payload as JSONObject)
-        "oauth" -> nextId.incrementAndGet().also { id ->
+        "googleAvailable" -> google.available()
+        "googleToken" -> nextId.incrementAndGet().also { google.token(it, payload as JSONObject) }
+        "googleConnect" -> nextId.incrementAndGet().also { id ->
             ui.post {
                 val activity = plugin?.owner
                 if (activity == null) complete(id, null, "Open the kiosk to sign in")
-                else oauth.start(id, activity, payload as JSONObject)
+                else google.connect(id, activity, payload as JSONObject)
             }
         }
         "pickFolder" -> nextId.incrementAndGet().also { id ->
@@ -228,7 +234,13 @@ internal class Backend private constructor(private val context: Context) {
             val event = it.getString(0)
             val data = it.getJSONObject(1)
             if (event == "push:kioskIdle") kioskState = data.getString("state")
-            if (visible) ui.post { plugin?.push(event, data) }
+            if (event == "push:dataChanged") {
+                val domain = data.getString("domain")
+                dirtyDomains.add(domain)
+                if (visible) ui.post {
+                    if (visible && dirtyDomains.remove(domain)) plugin?.push(event, data)
+                }
+            } else if (visible) ui.post { plugin?.push(event, data) }
             null
         }
         else -> error("Unknown platform operation")
@@ -260,6 +272,13 @@ internal class Backend private constructor(private val context: Context) {
 
         fun get(context: Context): Backend = instance ?: synchronized(this) {
             instance ?: Backend(context.applicationContext).also { instance = it }
+        }
+
+        private fun asciiJson(json: String): String = if (json.all { it.code < 128 }) json else buildString {
+            for (char in json) {
+                if (char.code < 128) append(char)
+                else append("\\u").append(char.code.toString(16).padStart(4, '0'))
+            }
         }
 
         private fun failure(code: String, message: String) = Result(

@@ -2,6 +2,8 @@
 
 An open-source, fully standalone family calendar display — a [Skylight Calendar](https://myskylight.com) alternative with no subscription, no cloud account, and no Home Assistant. One Electron app owns the whole touchscreen: calendar, family member color coding, Google sync, weather, chores, rewards, lists, meals, news, live cameras, and a photo screensaver.
 
+The Android branch has separate [APK installation and verification instructions](docs/ANDROID_PORT.md).
+
 ## What it looks like
 
 The customizable home screen — a big clock and a 3-day weather glance in the

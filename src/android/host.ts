@@ -1,7 +1,9 @@
 declare function androidHost(operation: string, json: string): string
 
 export function host<T>(operation: string, payload: unknown = null): T {
-  const result = JSON.parse(androidHost(operation, JSON.stringify(payload)))
+  const json = JSON.stringify(payload).replace(/[^\x00-\x7f]/g, (char) =>
+    `\\u${char.charCodeAt(0).toString(16).padStart(4, '0')}`)
+  const result = JSON.parse(androidHost(operation, json))
   if (result.error) throw new Error(result.error)
   return result.data as T
 }

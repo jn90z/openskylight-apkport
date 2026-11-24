@@ -33,7 +33,7 @@ const settings = createSettingsService(db)
 const auth = createAuthService(settings)
 const tokens = createCompanionTokens(settings)
 const deviceTz = () => DateTime.local().zoneName ?? 'UTC'
-const googleAuth = createAndroidGoogleAuth(db, settings)
+const googleAuth = createAndroidGoogleAuth(db)
 const googleSync = createGoogleSync({ db, auth: googleAuth as unknown as Parameters<typeof createGoogleSync>[0]['auth'], deviceTz })
 const broadcast = (channel: string, payload: unknown): void => { host('push', [channel, payload]) }
 const outbox = createOutboxWorker({ db, sync: googleSync, onConflict: (title) => broadcast('push:syncConflict', { title }) })
@@ -96,8 +96,7 @@ Object.assign(globalThis, {
     host('reply', [args[0], 500, { ok: false, error: { code: 'INTERNAL', message: 'Something went wrong' } }])
   }) },
   oslComplete: completeRequest,
-  oslTimer: fireTimer,
-  oslActivity: () => { kiosk.reportActivity(); kiosk.apply() }
+  oslTimer: fireTimer
 })
 companion.applySettings()
 host('launchAtBoot', settings.getAll().launchOnStartup)

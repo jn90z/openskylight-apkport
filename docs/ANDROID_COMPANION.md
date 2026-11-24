@@ -1,18 +1,34 @@
-# Required companion application
+# Android companion web app
 
-The Android port must preserve the upstream LAN companion web app, not remove it as a memory optimization.
+1. Connect the tablet and phone to the same trusted Wi-Fi or Ethernet network.
+2. On the tablet, unlock Settings with the parent PIN. Enable Companion and
+   keep port 8420 unless it conflicts with another device service.
+3. Scan the pairing QR from the phone and open the displayed address. The
+   browser stores this pairing. Pair a second phone the same way.
+4. To revoke existing pairings, select **Unpair all** in Settings and pair the
+   phones you still want to use. If the router assigns a new tablet IP,
+   pair the phone at the new origin. A router DHCP reservation keeps the URL stable.
 
-## Architecture
-- Reuse the existing src/companion React UI and its API contract.
-- Package its separately built static assets alongside the main renderer.
-- Implement a lightweight embedded Android HTTP server, with bounded worker threads and request sizes. No Node.js or second browser runtime on the tablet.
-- Both the Capacitor bridge and companion HTTP routes call the same native service layer and SQLite database. Preserve transactions, validation, authorization and change notifications.
-- Preserve upstream pairing, token revocation and parent authorization semantics; protect credentials and tokens, avoid logging them, restrict exposure to trusted LAN, and evaluate transport security before release.
-- Preserve companion functionality and test against upstream routes, including calendars, chores and lists. No external server required for LAN operation.
-- Keep companion reachable while the display sleeps when enabled; evaluate Android foreground service and power-management requirements with user-visible notification as appropriate. Do not assume unrestricted background execution.
-- Use event-driven invalidation, bounded caches, no duplicate database, no continuous busy polling. Measure combined WebView and server memory on the 2 GB SM-T510.
+The app serves the original mobile React bundle and its allowlisted RPC routes.
+Tablet and phone changes use the same SQLite database and service validation.
+A companion bearer is a parent credential. Only its hash is stored on the
+tablet. Failed requests are rate limited, and the server caps request sizes and
+the number of workers. Android displays a foreground-service notification while
+companion is enabled.
 
-## Acceptance
-Test pairing from a second device, authorized read/write, changes reflected on both screens, token revocation, restart persistence, screen-off access, network changes and 24-hour resource usage.
+The local URL uses HTTP, like the desktop kiosk. Use private networks you
+control. Other devices with access to the local traffic can see unencrypted
+requests. Keep the port off public networks and router port forwarding. The
+listener accepts requests addressed to the tablet's current private LAN IP on
+Wi-Fi or Ethernet.
 
-Status: architecture requirement only; server, companion asset packaging and native services are not yet implemented.
+## Acceptance test
+
+With a second physical device, load the URL and verify that requests without a
+pairing are rejected. Pair, create an event and grocery item on the phone, check
+them on the tablet, then complete a chore on the tablet and refresh the phone.
+Revoke all pairings and confirm the previous browser receives a pairing prompt.
+Re-pair, lock the tablet screen, and repeat after 15 minutes, a Wi-Fi disconnect
+and reconnect, and a tablet restart. Record the installed Android version and
+Samsung battery-management settings. If you enable managed kiosk startup, test
+both a clean reboot and a recovery after Wi-Fi returns.

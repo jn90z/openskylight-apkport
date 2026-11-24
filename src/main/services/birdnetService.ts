@@ -7,6 +7,7 @@ type Detection = BirdNetDto['detections'][number]
 const CACHE_TTL_MS = 15 * 1000 // tile polls every 20s; a short cache de-dupes multiple tiles
 const FETCH_TIMEOUT_MS = 10_000
 const MAX_ITEMS = 12
+const MAX_CACHED_HOSTS = 8
 
 /** Reduce any pasted BirdNET-Go URL (dashboard, trailing path, etc.) to its origin. */
 export function normalizeBirdnetUrl(rawUrl: string): string {
@@ -69,7 +70,12 @@ export function createBirdNetService() {
       if (!res.ok) throw new Error(`BirdNET-Go returned HTTP ${res.status}`)
       const detections = parseDetections(await res.json(), origin)
       const data: BirdNetDto = { url: origin, label: 'Birds', detections, fetchedAt: new Date().toISOString() }
+      cache.delete(origin)
       cache.set(origin, { data, atMs: Date.now() })
+      if (cache.size > MAX_CACHED_HOSTS) {
+        const oldest = cache.keys().next().value
+        if (oldest !== undefined) cache.delete(oldest)
+      }
       return data
     } catch (err) {
       if (cached) return cached.data // serve stale over an error

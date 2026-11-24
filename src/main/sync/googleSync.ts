@@ -39,14 +39,21 @@ export function createGoogleSync(deps: { db: AppDb; auth: Pick<GoogleAuth, 'getA
   }
 
   async function listRemoteCalendars(accountId: string): Promise<RemoteCalendarInfo[]> {
-    const res = await api(accountId).calendarList.list({ maxResults: 250 })
+    const client = api(accountId)
+    const items: calendar_v3.Schema$CalendarListEntry[] = []
+    let pageToken: string | undefined
+    do {
+      const res = await client.calendarList.list({ maxResults: 250, pageToken })
+      items.push(...(res.data.items ?? []))
+      pageToken = res.data.nextPageToken ?? undefined
+    } while (pageToken)
     const existing = db
       .select()
       .from(calendars)
       .where(and(eq(calendars.googleAccountId, accountId), isNull(calendars.deletedAt)))
       .all()
     const selectedIds = new Set(existing.map((c) => c.googleCalendarId))
-    return (res.data.items ?? []).map((item) => ({
+    return items.map((item) => ({
       id: item.id!,
       name: item.summaryOverride ?? item.summary ?? item.id!,
       color: item.backgroundColor ?? '#0091FF',
@@ -126,7 +133,7 @@ export function createGoogleSync(deps: { db: AppDb; auth: Pick<GoogleAuth, 'getA
         if (res.data.nextSyncToken) nextSyncToken = res.data.nextSyncToken
       } while (pageToken)
     } catch (err) {
-      if (httpStatus(err) === 410) {
+      if (httpStatus(err) === 410 && cal.syncToken) {
         // sync token expired — full resync
         db.update(calendars).set({ syncToken: null }).where(eq(calendars.id, cal.id)).run()
         return pullCalendar({ ...cal, syncToken: null })

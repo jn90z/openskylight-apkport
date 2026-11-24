@@ -8,6 +8,7 @@ export default defineConfig({
   root: resolve(__dirname, 'src/renderer'),
   base: './',
   build: {
+    target: 'chrome74',
     outDir: resolve(__dirname, 'out/android'),
     emptyOutDir: true,
     rollupOptions: { input: resolve(__dirname, 'src/renderer/android.html') }

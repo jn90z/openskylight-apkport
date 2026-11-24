@@ -258,6 +258,7 @@ function PlaintextSecretsNotice() {
 }
 
 function GoogleSection() {
+  const { data: info } = useAppInfo()
   const { data: status } = useGoogleStatus()
   const google = useGoogleMutations()
   const [clientId, setClientId] = useState('')
@@ -280,16 +281,20 @@ function GoogleSection() {
       {!status.configured ? (
         <div className="flex flex-col gap-3 rounded-2xl bg-paper-deep/50 p-4">
           {status.notice && <p className="text-base font-bold text-ember-deep">{status.notice}</p>}
-          <p className="text-base font-semibold text-ink-soft">
-            Two-way sync uses your own (free) Google Cloud project. Create a{' '}
-            <span className="font-extrabold">Desktop app</span> OAuth client in the Google Cloud console, enable the
-            Calendar API, and paste the credentials here.
-          </p>
-          <OskInput value={clientId} onChange={setClientId} placeholder="OAuth client ID" />
-          <OskInput value={clientSecret} onChange={setClientSecret} placeholder="OAuth client secret" />
-          <BigButton onClick={saveAndConnect} disabled={clientId.trim().length < 10 || clientSecret.trim().length < 5}>
-            {google.connect.isPending ? 'Waiting for browser sign-in…' : 'Save & connect Google'}
-          </BigButton>
+          {info?.platform !== 'android' && (
+            <>
+              <p className="text-base font-semibold text-ink-soft">
+                Two-way sync uses your own (free) Google Cloud project. Create a{' '}
+                <span className="font-extrabold">Desktop app</span> OAuth client in the Google Cloud console, enable the
+                Calendar API, and paste the credentials here.
+              </p>
+              <OskInput value={clientId} onChange={setClientId} placeholder="OAuth client ID" />
+              <OskInput value={clientSecret} onChange={setClientSecret} placeholder="OAuth client secret" />
+              <BigButton onClick={saveAndConnect} disabled={clientId.trim().length < 10 || clientSecret.trim().length < 5}>
+                {google.connect.isPending ? 'Waiting for browser sign-in…' : 'Save & connect Google'}
+              </BigButton>
+            </>
+          )}
         </div>
       ) : (
         <div className="flex flex-col gap-3">
@@ -346,7 +351,7 @@ function GoogleSection() {
             </div>
           ))}
           <BigButton variant="ghost" onClick={() => google.connect.mutate(undefined)} disabled={google.connect.isPending}>
-            {google.connect.isPending ? 'Waiting for browser sign-in…' : 'Add Google account'}
+            {google.connect.isPending ? 'Waiting for Google sign-in…' : 'Add Google account'}
           </BigButton>
         </div>
       )}

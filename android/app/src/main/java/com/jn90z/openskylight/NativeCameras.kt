@@ -35,7 +35,7 @@ internal class NativeCameras(
         }
         val view = TextureView(context).apply {
             isOpaque = true
-            visibility = View.INVISIBLE
+            alpha = 0f
             importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
         }
         container.addView(view, FrameLayout.LayoutParams(1, 1, Gravity.TOP or Gravity.LEFT))
@@ -45,7 +45,10 @@ internal class NativeCameras(
         player.setVideoTextureView(view)
         player.addListener(object : Player.Listener {
             override fun onRenderedFirstFrame() {
-                if (active?.id == id) status(id, "live")
+                if (active?.id == id) {
+                    view.alpha = 1f
+                    status(id, "live")
+                }
             }
             override fun onPlayerError(error: PlaybackException) {
                 if (active?.id == id) {
@@ -69,6 +72,7 @@ internal class NativeCameras(
         val session = active?.takeIf { it.id == id } ?: return
         if (width <= 0 || height <= 0 || !visible) {
             session.view.visibility = View.INVISIBLE
+            session.player.pause()
             return
         }
         val frame = FrameLayout.LayoutParams(width, height, Gravity.TOP or Gravity.LEFT)
@@ -76,6 +80,7 @@ internal class NativeCameras(
         frame.topMargin = top
         session.view.layoutParams = frame
         session.view.visibility = View.VISIBLE
+        session.player.play()
     }
 
     fun stop(id: String) {

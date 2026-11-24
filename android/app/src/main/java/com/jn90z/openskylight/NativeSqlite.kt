@@ -29,7 +29,7 @@ internal class NativeSqlite(context: Context) {
         return db.rawQueryWithFactory({ _, driver, table, query ->
             query.bind(args)
             android.database.sqlite.SQLiteCursor(driver, table, query)
-        }, sql, null, null).use { cursor ->
+        }, sql, null, "").use { cursor ->
             while (cursor.moveToNext()) {
                 val row = JSONArray()
                 for (column in 0 until cursor.columnCount) row.put(
