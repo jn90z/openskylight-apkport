@@ -25,8 +25,9 @@ Wi-Fi or Ethernet.
 ## Acceptance test
 
 With a second physical device, load the URL and verify that requests without a
-pairing are rejected. Pair, create an event and grocery item on the phone, check
-them on the tablet, then complete a chore on the tablet and refresh the phone.
+pairing are rejected. Pair, create a grocery item on the phone and check it on the tablet. Create a
+calendar event or complete a chore on the tablet, then refresh the phone. The
+companion calendar is read-only, as on Linux.
 Revoke all pairings and confirm the previous browser receives a pairing prompt.
 Re-pair, lock the tablet screen, and repeat after 15 minutes, a Wi-Fi disconnect
 and reconnect, and a tablet restart. Record the installed Android version and
