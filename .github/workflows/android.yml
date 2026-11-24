@@ -64,12 +64,7 @@ jobs:
           ram-size: 2048M
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim
           disable-animations: true
-          script: |
-            cd android
-            if ! ./gradlew :app:connectedDebugAndroidTest --no-daemon --max-workers=2; then
-              adb logcat -d -s OpenSkyLight AndroidRuntime
-              exit 1
-            fi
+          script: cd android && (./gradlew :app:connectedDebugAndroidTest --no-daemon --max-workers=2 || { adb logcat -d -s OpenSkyLight AndroidRuntime; exit 1; })
       - name: Upload instrumentation results
         if: always()
         uses: actions/upload-artifact@v6
