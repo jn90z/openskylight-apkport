@@ -264,7 +264,7 @@ function GoogleSection() {
   const [clientId, setClientId] = useState('')
   const [clientSecret, setClientSecret] = useState('')
   const [expandedAccount, setExpandedAccount] = useState<string | null>(null)
-  const { data: remoteCals = [], isLoading: remoteLoading } = useRemoteCalendars(expandedAccount)
+  const { data: remoteCals = [], isLoading: remoteLoading, error: remoteError, refetch: retryRemote } = useRemoteCalendars(expandedAccount)
 
   if (!status) return null
 
@@ -323,6 +323,17 @@ function GoogleSection() {
               {expandedAccount === account.id && (
                 <div className="mt-3 flex flex-col gap-2">
                   {remoteLoading && <p className="text-sm font-bold text-ink-faint">Loading calendars…</p>}
+                  {remoteError && (
+                    <div role="alert" className="text-sm font-bold text-ember-deep">
+                      <p>{remoteError.message}</p>
+                      <button type="button" className="mt-2 underline" onClick={() => void retryRemote()}>
+                        Retry loading calendars
+                      </button>
+                    </div>
+                  )}
+                  {!remoteLoading && !remoteError && remoteCals.length === 0 && (
+                    <p className="text-sm font-bold text-ink-faint">Google returned no calendars for this account.</p>
+                  )}
                   {remoteCals.map((rc) => (
                     <div key={rc.id} className="flex items-center gap-3 rounded-xl bg-card px-3 py-2">
                       <span className="h-5 w-5 rounded-full" style={{ backgroundColor: rc.color }} />

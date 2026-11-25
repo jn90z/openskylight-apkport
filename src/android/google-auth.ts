@@ -11,7 +11,30 @@ const SCOPE = 'https://www.googleapis.com/auth/calendar'
 
 export async function googleRequest<T>(url: string, options?: RequestInit): Promise<T> {
   const response = await fetch(url, options)
-  if (!response.ok) throw Object.assign(new Error(`Google returned HTTP ${response.status}`), { status: response.status })
+  if (!response.ok) {
+    let message = `Google Calendar returned HTTP ${response.status}`
+    try {
+      const body = await response.json() as {
+        error?: { message?: string; errors?: { reason?: string }[]; details?: { reason?: string }[] }
+      }
+      const reasons = [
+        ...(body.error?.errors ?? []),
+        ...(body.error?.details ?? [])
+      ].map((entry) => entry.reason)
+      if (reasons.some((reason) => ['accessNotConfigured', 'SERVICE_DISABLED'].includes(reason ?? ''))) {
+        message = 'Enable Google Calendar API in the Google Cloud project containing this app’s Android OAuth client, then retry.'
+      } else if (response.status === 401) {
+        message = 'Google authorization expired. Reconnect this account in Settings.'
+      } else if (response.status === 403 && reasons.includes('insufficientPermissions')) {
+        message = 'Google Calendar permission is missing. Reconnect this account and grant Calendar access.'
+      } else if (body.error?.message) {
+        message = body.error.message.slice(0, 500)
+      }
+    } catch {
+      // Keep the HTTP status when the provider response is not JSON.
+    }
+    throw Object.assign(new AppError('GOOGLE_API', message), { status: response.status })
+  }
   return response.status === 204 ? undefined as T : response.json() as Promise<T>
 }
 
